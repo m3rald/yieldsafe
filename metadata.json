@@ -1,0 +1,6 @@
+{
+  "name": "YieldSafe",
+  "description": "A goal-based USDC savings vault with simulated yield on Arc Testnet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

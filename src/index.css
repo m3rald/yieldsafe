@@ -1,0 +1,347 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@500;700;800&family=Alegreya:ital,wght@0,400..900;1,400..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-syne: "Syne", sans-serif;
+  --font-alegreya: "Alegreya", Georgia, serif;
+
+  /* Custom YieldSafe theme variables mapped to botanical Teal-to-Blue crystal values */
+  --color-primary-teal: #0d9488;
+  --color-dark-teal: #042f2e;
+  --color-blue-accent: #0284c7;
+
+  --animate-spin-slow: spin 15s linear infinite;
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-shimmer: shimmer 2s infinite linear;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(1deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Custom Crystal Glass Glassmorphism helper styles with pristine refraction & light leak overlays */
+.crystal-panel {
+  background: rgba(4, 18, 24, 0.65);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.5), 
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.06),
+    inset -1px -1px 1px rgba(255, 255, 255, 0.02);
+}
+
+.crystal-panel-teal {
+  background: rgba(3, 24, 33, 0.75);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(13, 148, 136, 0.25);
+  box-shadow: 
+    0 12px 48px rgba(3, 24, 33, 0.4), 
+    inset 0 1.5px 1.5px rgba(13, 148, 136, 0.15),
+    inset -1px -1px 1px rgba(255, 255, 255, 0.04);
+}
+
+.crystal-panel-interactive {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crystal-panel-interactive:hover {
+  transform: translateY(-4px) scale(1.01);
+  background: rgba(6, 31, 44, 0.82);
+  border-color: rgba(20, 184, 166, 0.35);
+  box-shadow: 
+    0 20px 50px rgba(13, 148, 136, 0.2), 
+    inset 1.5px 1.5px 1.5px rgba(255, 255, 255, 0.12);
+}
+
+/* Elegant diagonal ribbon stripes background styles to fit theme */
+.chevron-stripes {
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(13, 148, 136, 0.12) 10px, rgba(13, 148, 136, 0.12) 20px);
+}
+
+/* Elegant radial gradients for ambient lighting */
+.bg-radial-glow {
+  background: radial-gradient(circle at 50% 50%, rgba(13, 148, 136, 0.18) 0%, transparent 60%);
+}
+
+.bg-radial-orange-glow {
+  background: radial-gradient(circle at 30% 20%, rgba(29, 78, 216, 0.12) 0%, transparent 50%);
+}
+
+.text-glow-teal {
+  text-shadow: 0 0 15px rgba(20, 184, 166, 0.65);
+}
+
+.text-glow-gold {
+  text-shadow: 0 0 15px rgba(2, 132, 199, 0.6);
+}
+
+.premium-button-teal {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0d9488 0%, #1e3a8a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 24px rgba(13, 148, 136, 0.25), 
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.25);
+  transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.premium-button-teal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-25deg);
+  transition: 0.75s;
+}
+
+.premium-button-teal:hover::before {
+  left: 150%;
+}
+
+.premium-button-teal:hover {
+  transform: translateY(-2.5px);
+  box-shadow: 
+    0 12px 32px rgba(13, 148, 136, 0.4), 
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.4);
+  filter: brightness(1.15);
+}
+
+.premium-button-teal:active {
+  transform: translateY(0);
+}
+
+/* ==========================================
+   LIGHT MODE DESIGN SYSTEM (THEME-LIGHT)
+   ========================================== */
+
+.theme-light {
+  --color-primary-teal: #0d9488;
+}
+
+/* Translucent Crystal Glass Panel in Light Mode */
+.theme-light .crystal-panel {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1px solid rgba(13, 148, 136, 0.1) !important;
+  box-shadow: 
+    0 10px 40px rgba(13, 148, 136, 0.05), 
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Translucent Crystal Red Panel in Light Mode */
+.theme-light .crystal-panel-teal {
+  background: rgba(240, 253, 250, 0.85) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1px solid rgba(20, 184, 166, 0.2) !important;
+  box-shadow: 
+    0 12px 40px rgba(20, 184, 166, 0.06), 
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Hover effect with majestic shadow hovering in light mode */
+.theme-light .crystal-panel-interactive:hover {
+  transform: translateY(-5px) scale(1.01) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(20, 184, 166, 0.35) !important;
+  box-shadow: 
+    0 20px 50px rgba(13, 148, 136, 0.15), 
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 1) !important;
+}
+
+/* Map standard text classes inside theme-light to deep, readable slate tones */
+.theme-light .text-white:not(.keep-white) {
+  color: #0f172a !important;
+}
+
+.theme-light .text-zinc-100 {
+  color: #1e293b !important;
+}
+
+.theme-light .text-zinc-200 {
+  color: #1e293b !important;
+}
+
+.theme-light .text-zinc-350 {
+  color: #334155 !important;
+}
+
+.theme-light .text-zinc-400 {
+  color: #334155 !important;
+}
+
+.theme-light .text-zinc-450 {
+  color: #475569 !important;
+}
+
+.theme-light .text-zinc-500 {
+  color: #475569 !important;
+}
+
+.theme-light .text-zinc-550,
+.theme-light .text-zinc-555,
+.theme-light .text-zinc-650 {
+  color: #1e293b !important;
+}
+
+.theme-light .text-zinc-300 {
+  color: #111827 !important;
+}
+
+.theme-light .text-zinc-705,
+.theme-light .text-zinc-700 {
+  color: #0f172a !important;
+}
+
+.theme-light .text-zinc-205 {
+  color: #0f172a !important;
+}
+
+/* Exclude forcing dark text on premium teal elements to preserve readability */
+.theme-light .premium-button-teal,
+.theme-light .premium-button-teal *,
+.theme-light .bg-teal-650,
+.theme-light .bg-teal-650 *,
+.theme-light .bg-teal-600,
+.theme-light .bg-teal-600 *,
+.theme-light .bg-teal-500,
+.theme-light .bg-teal-500 *,
+.theme-light .bg-[#da291c],
+.theme-light .bg-[#da291c] *,
+.theme-light .keep-white,
+.theme-light .keep-white *,
+.theme-light #btn-create-submit,
+.theme-light #btn-create-submit *,
+.theme-light [id^="nav-tab-"][class*="bg-"] *,
+.theme-light [id^="toggle-mode-"][class*="bg-"] * {
+  color: #ffffff !important;
+}
+
+/* Ensure text on light blue/green active buttons inside modals remains perfectly readable */
+.theme-light .bg-sky-500,
+.theme-light .bg-sky-500 *,
+.theme-light .bg-teal-500,
+.theme-light .bg-teal-500 *,
+.theme-light .bg-emerald-500,
+.theme-light .bg-emerald-500 * {
+  color: #030712 !important;
+}
+
+/* Background elements in light mode styled as beautiful clean slate/off-white panels of different elevations */
+.theme-light .bg-zinc-950 {
+  background-color: #f8fafc !important;
+}
+
+.theme-light .bg-zinc-950\/90 {
+  background-color: rgba(248, 250, 252, 0.95) !important;
+}
+
+.theme-light .bg-zinc-950\/80 {
+  background-color: rgba(241, 245, 249, 0.85) !important;
+}
+
+.theme-light .bg-zinc-950\/70 {
+  background-color: rgba(241, 245, 249, 0.75) !important;
+}
+
+.theme-light .bg-zinc-950\/60 {
+  background-color: rgba(241, 245, 249, 0.65) !important;
+}
+
+.theme-light .bg-zinc-900\/50 {
+  background-color: rgba(226, 232, 240, 0.55) !important;
+}
+
+.theme-light .bg-zinc-950\/40 {
+  background-color: rgba(241, 245, 249, 0.45) !important;
+}
+
+.theme-light .bg-zinc-850 {
+  background-color: #cbd5e1 !important;
+}
+
+.theme-light .bg-zinc-900 {
+  background-color: #f1f5f9 !important;
+}
+
+.theme-light .bg-stone-950\/50 {
+  background-color: rgba(241, 245, 249, 0.60) !important;
+}
+
+.theme-light .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.theme-light .bg-black\/20 {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+.theme-light .bg-[#da291c] {
+  background-color: #0d9488 !important;
+}
+
+.theme-light .bg-teal-950\/20 {
+  background-color: rgba(204, 251, 241, 0.50) !important;
+}
+
+.theme-light .bg-teal-950\/40 {
+  background-color: rgba(204, 251, 241, 0.75) !important;
+}
+
+.theme-light .bg-teal-950\/65 {
+  background-color: rgba(204, 251, 241, 0.90) !important;
+}
+
+.theme-light .border-white\/5 {
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+.theme-light .border-white\/10 {
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+.theme-light .border-zinc-900 {
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light .border-zinc-800 {
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light .border-zinc-850 {
+  border-color: #94a3b8 !important;
+}
+
+/* Ensure form input elements in light mode are crisp and highly usable */
+.theme-light input, 
+.theme-light select, 
+.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.theme-light .text-glow-teal {
+  text-shadow: 0 0 15px rgba(20, 184, 166, 0.35) !important;
+}
