@@ -30,6 +30,7 @@ interface SimulatorControlsProps {
   onConnectWallet: () => void;
   onDisconnectWallet: () => void;
   liveContractAddress: string;
+  isPrivy?: boolean;
 }
 
 export default function SimulatorControls({
@@ -51,7 +52,8 @@ export default function SimulatorControls({
   isWeb3Connecting,
   onConnectWallet,
   onDisconnectWallet,
-  liveContractAddress
+  liveContractAddress,
+  isPrivy = false
 }: SimulatorControlsProps) {
   const [ffOptionSelected, setFfOptionSelected] = useState<number>(86400); // default +1 day
   const [copyStatus, setCopyStatus] = useState<string>("");
@@ -271,15 +273,17 @@ export default function SimulatorControls({
             {isTestnet ? (
               !web3WalletConnected ? (
                 <div className="mt-4 space-y-2.5">
-                  <button
-                    onClick={onConnectWallet}
-                    disabled={isWeb3Connecting}
-                    className="w-full flex items-center justify-center gap-1.5 py-3 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold font-display uppercase tracking-wider rounded-xl transition-all shadow-md shadow-teal-950/40 cursor-pointer"
-                    id="btn-connect-wallet-controls"
-                  >
-                    <Wallet size={13} />
-                    {isWeb3Connecting ? "Linking..." : "Connect EVM Wallet"}
-                  </button>
+                  {!isPrivy && (
+                    <button
+                      onClick={onConnectWallet}
+                      disabled={isWeb3Connecting}
+                      className="w-full flex items-center justify-center gap-1.5 py-3 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold font-display uppercase tracking-wider rounded-xl transition-all shadow-md shadow-teal-950/40 cursor-pointer"
+                      id="btn-connect-wallet-controls"
+                    >
+                      <Wallet size={13} />
+                      {isWeb3Connecting ? "Linking..." : "Connect EVM Wallet"}
+                    </button>
+                  )}
                   <div className="text-center">
                     <a 
                       href="https://faucet.circle.com" 
@@ -295,7 +299,7 @@ export default function SimulatorControls({
               ) : (
                 <div className="mt-4 space-y-2.5">
                   <div className="text-[10px] text-zinc-400 text-center border border-white/5 p-2 rounded-xl bg-zinc-950 font-sans space-y-2">
-                    <p>Secure Metamask link active. Obtain USDC tokens to interact with Arc Network.</p>
+                    <p>{isPrivy ? "Secure Privy Embedded Wallet active." : "Secure EVM Wallet link active."} Obtain USDC tokens to interact with Arc Network.</p>
                     <div className="pt-1.5 border-t border-white/5 flex justify-center">
                       <a 
                         href="https://faucet.circle.com" 
@@ -308,13 +312,15 @@ export default function SimulatorControls({
                       </a>
                     </div>
                   </div>
-                  <button
-                    onClick={onDisconnectWallet}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-zinc-950/50 hover:bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold rounded-xl border border-zinc-800 transition cursor-pointer"
-                    id="btn-disconnect-wallet"
-                  >
-                    Disconnect Wallet
-                  </button>
+                  {!isPrivy && (
+                    <button
+                      onClick={onDisconnectWallet}
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-zinc-950/50 hover:bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold rounded-xl border border-zinc-800 transition cursor-pointer"
+                      id="btn-disconnect-wallet"
+                    >
+                      Disconnect Wallet
+                    </button>
+                  )}
                 </div>
               )
             ) : (

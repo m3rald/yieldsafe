@@ -9,6 +9,7 @@ import { useWallets } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { SimulationState } from "../types";
 import { formatUSDC } from "../mockContract";
+import { getUSDCBalance, USDC_TOKEN_ADDRESS } from "../web3Contract";
 
 interface CreateVaultModalProps {
   state: SimulationState;
@@ -66,8 +67,8 @@ export default function CreateVaultModal({
     try {
       const provider = await privyWallet.getEthereumProvider();
       const ethersProvider = new ethers.BrowserProvider(provider);
-      const balanceWei = await ethersProvider.getBalance(privyWallet.address);
-      const balUSDC = Number(balanceWei) / 1e18;
+      const balanceMicroUSDC = await getUSDCBalance(ethersProvider, privyWallet.address, USDC_TOKEN_ADDRESS);
+      const balUSDC = balanceMicroUSDC / 1000000;
       setEmbeddedBalance(balUSDC);
     } catch (err) {
       console.error("Failed to fetch embedded wallet balance:", err);

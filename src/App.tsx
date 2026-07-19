@@ -191,13 +191,20 @@ export default function App() {
   // On-chain state loader
   const loadBlockchainState = async (provider?: any, userAddr?: string) => {
     try {
-      const activeEth = getActiveEthereumObject();
-      if (!activeEth) return;
-      
-      const activeAddress = userAddr || web3Address;
-      if (!activeAddress) return;
-      
-      const currentProvider = provider || new ethers.BrowserProvider(activeEth as any);
+      let currentProvider = provider;
+      let activeAddress = userAddr;
+
+      if (!currentProvider || !activeAddress) {
+        const res = await getProviderAndAddress();
+        if (res) {
+          currentProvider = currentProvider || res.provider;
+          activeAddress = activeAddress || res.address;
+        }
+      }
+
+      if (!currentProvider || !activeAddress) {
+        return;
+      }
       
       // Get and store the connected chain ID
       let connectedChainId: number | null = null;
@@ -286,16 +293,18 @@ export default function App() {
       const vaultIds: any[] = await contract.getUserVaults(activeAddress);
       const fetchedVaults: Record<number, Vault> = {};
       
-      for (const rawId of vaultIds) {
-        const id = Number(rawId);
-        try {
-          const details = await contract.getVaultDetails(id);
-          const mapped = mapBlockchainVault(details.vault);
-          fetchedVaults[id] = mapped;
-        } catch (err) {
-          console.warn(`Error loading vault #${id} gracefully`, err);
-        }
-      }
+      await Promise.all(
+        vaultIds.map(async (rawId) => {
+          const id = Number(rawId);
+          try {
+            const details = await contract.getVaultDetails(id);
+            const mapped = mapBlockchainVault(details.vault);
+            fetchedVaults[id] = mapped;
+          } catch (err) {
+            console.warn(`Error loading vault #${id} gracefully`, err);
+          }
+        })
+      );
       
       setWeb3USDCBalance(balance);
       setWeb3Allowance(allowance);
@@ -484,18 +493,96 @@ export default function App() {
     addNotification("Wallet disconnected. Returning to Local Simulation presets.", "info");
   };
 
-  // Sync Privy embedded wallet to Web3 state
+  const isEmailOrGoogleUser = authenticated && !!(user?.email || user?.google);
+  const isExternalWalletUser = web3WalletConnected && !isEmailOrGoogleUser;
+
+  const getRawEthereumProvider = async () => {
+    const isEmailOrGoogle = authenticated && !!(user?.email || user?.google);
+    let targetWallet = null;
+    if (isEmailOrGoogle) {
+      targetWallet = wallets.find(w => w.walletClientType === "privy");
+    } else {
+      targetWallet = wallets.find(w => w.walletClientType !== "privy");
+    }
+
+    if (targetWallet) {
+      return await targetWallet.getEthereumProvider();
+    }
+    return getActiveEthereumObject();
+  };
+
+  const getProviderAndAddress = async () => {
+    const isEmailOrGoogle = authenticated && !!(user?.email || user?.google);
+    let targetWallet = null;
+    if (isEmailOrGoogle) {
+      targetWallet = wallets.find(w => w.walletClientType === "privy");
+    } else {
+      targetWallet = wallets.find(w => w.walletClientType !== "privy");
+    }
+
+    let ethObj = null;
+    let activeAddr = web3Address;
+
+    if (targetWallet) {
+      ethObj = await targetWallet.getEthereumProvider();
+      activeAddr = targetWallet.address;
+    } else {
+      ethObj = getActiveEthereumObject();
+    }
+
+    if (!ethObj) {
+      return null;
+    }
+    const provider = new ethers.BrowserProvider(ethObj as any);
+    return { provider, address: activeAddr };
+  };
+
+  const getSignerAndAddress = async () => {
+    const isEmailOrGoogle = authenticated && !!(user?.email || user?.google);
+    let targetWallet = null;
+    if (isEmailOrGoogle) {
+      targetWallet = wallets.find(w => w.walletClientType === "privy");
+    } else {
+      targetWallet = wallets.find(w => w.walletClientType !== "privy");
+    }
+
+    let ethObj = null;
+    let activeAddr = web3Address;
+
+    if (targetWallet) {
+      ethObj = await targetWallet.getEthereumProvider();
+      activeAddr = targetWallet.address;
+    } else {
+      ethObj = getActiveEthereumObject();
+    }
+
+    if (!ethObj) {
+      throw new Error("Active Web3 wallet provider not found. Please connect or log in.");
+    }
+    const provider = new ethers.BrowserProvider(ethObj as any);
+    const signer = await provider.getSigner();
+    return { provider, signer, address: activeAddr };
+  };
+
+  // Sync Privy embedded or external wallet to Web3 state
   useEffect(() => {
     let active = true;
     if (authenticated && wallets.length > 0) {
-      const privyWallet = wallets.find(w => w.walletClientType === 'privy');
-      if (privyWallet) {
-        privyWallet.getEthereumProvider().then((provider) => {
+      const isEmailOrGoogle = !!(user?.email || user?.google);
+      let targetWallet = null;
+      if (isEmailOrGoogle) {
+        targetWallet = wallets.find(w => w.walletClientType === "privy");
+      } else {
+        targetWallet = wallets.find(w => w.walletClientType !== "privy");
+      }
+
+      if (targetWallet) {
+        targetWallet.getEthereumProvider().then((provider) => {
           if (!active) return;
           setPrivyProvider(provider);
-          setWeb3Address(privyWallet.address);
+          setWeb3Address(targetWallet.address);
           setWeb3WalletConnected(true);
-          setSelectedWallet("privy");
+          setSelectedWallet(targetWallet.walletClientType);
 
           // Automatically switch/add Arc Testnet network if needed
           const ethersProvider = new ethers.BrowserProvider(provider);
@@ -548,10 +635,16 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [authenticated, wallets]);
+  }, [authenticated, wallets, user]);
 
   // Set up account/chain listeners based on active wallet type
   useEffect(() => {
+    // If the user logged in via email/Google, they are using the Privy embedded wallet.
+    // They should never see or listen to external injected wallets.
+    if (isEmailOrGoogleUser) {
+      return;
+    }
+
     const activeWalletType = localStorage.getItem("yieldsafe_selected_wallet") || selectedWallet || "metamask";
     const ethObject = getActiveEthereumObject(activeWalletType);
 
@@ -658,7 +751,7 @@ export default function App() {
         }
       };
     }
-  }, [selectedWallet]);
+  }, [selectedWallet, isEmailOrGoogleUser]);
 
   // Sync blockchain on-chain metrics regularly in web3 mode
   useEffect(() => {
@@ -666,7 +759,7 @@ export default function App() {
       // Force update network on testnet mode switch if connected to wrong chain
       const checkAndSwitchNetwork = async () => {
         try {
-          const ethObj = getActiveEthereumObject();
+          const ethObj = await getRawEthereumProvider();
           if (ethObj) {
             const provider = new ethers.BrowserProvider(ethObj as any);
             const net = await provider.getNetwork();
@@ -700,17 +793,17 @@ export default function App() {
     initialDeposit: number
   ) => {
     if (stateMode === "testnet") {
-      const privyWallet = wallets.find(w => w.walletClientType === 'privy');
-      if (!privyWallet) {
-        addNotification("Please login via Privy first to formulate on-chain vaults.", "error");
+      if (!web3WalletConnected) {
+        addNotification("Please connect a wallet first to formulate on-chain vaults.", "error");
+        return;
+      }
+      if (web3ChainId !== 5042002) {
+        addNotification("Wrong network! Please switch your wallet to Arc Testnet (Chain ID 5042002) first.", "error");
         return;
       }
       setIsWeb3Transacting(true);
       try {
-        const ethObj = await privyWallet.getEthereumProvider();
-        if (!ethObj) throw new Error("Active wallet provider not found.");
-        const provider = new ethers.BrowserProvider(ethObj as any);
-        const signer = await provider.getSigner();
+        const { provider, signer, address } = await getSignerAndAddress();
 
         // Check allowance
         if (initialDeposit > 0 && web3Allowance < initialDeposit) {
@@ -720,12 +813,12 @@ export default function App() {
           await aprTx.wait();
           addNotification("USDC Approved! Formulating Savings Goal on-chain...", "success");
 
-          const freshAllowance = await getUSDCAllowance(provider, privyWallet.address, liveContractAddress, usdcTokenAddress);
+          const freshAllowance = await getUSDCAllowance(provider, address, liveContractAddress, usdcTokenAddress);
           setWeb3Allowance(freshAllowance);
         }
 
         const contract = new ethers.Contract(liveContractAddress, YIELD_SAFE_ABI, signer);
-        addNotification("Please confirm the formulation transaction in Privy...", "info");
+        addNotification("Please confirm the formulation transaction in your wallet...", "info");
         const tx = await contract.createVault(
           goalName,
           targetAmount,
@@ -746,7 +839,7 @@ export default function App() {
         };
         setWeb3TxList(p => [historyItem, ...p]);
         
-        await loadBlockchainState(provider, privyWallet.address);
+        await loadBlockchainState(provider, address);
       } catch (err: any) {
         console.error("Failed to create vault on-chain", err);
         addNotification(`Formulation failed: ${err.reason || err.message || err}`, "error");
@@ -768,12 +861,13 @@ export default function App() {
   const handleDeposit = async (vaultId: number, amount: number) => {
     if (stateMode === "testnet") {
       if (!web3WalletConnected) return;
+      if (web3ChainId !== 5042002) {
+        addNotification("Wrong network! Please switch your wallet to Arc Testnet (Chain ID 5042002) first.", "error");
+        return;
+      }
       setIsWeb3Transacting(true);
       try {
-        const ethObj = getActiveEthereumObject();
-        if (!ethObj) throw new Error("Active wallet provider not found.");
-        const provider = new ethers.BrowserProvider(ethObj as any);
-        const signer = await provider.getSigner();
+        const { provider, signer, address } = await getSignerAndAddress();
 
         // Check allowance
         if (web3Allowance < amount) {
@@ -783,7 +877,7 @@ export default function App() {
           await aprTx.wait();
           addNotification("USDC Approved! Sending deposit...", "success");
 
-          const freshAllowance = await getUSDCAllowance(provider, web3Address, liveContractAddress, usdcTokenAddress);
+          const freshAllowance = await getUSDCAllowance(provider, address, liveContractAddress, usdcTokenAddress);
           setWeb3Allowance(freshAllowance);
         }
 
@@ -805,7 +899,7 @@ export default function App() {
         };
         setWeb3TxList(p => [historyItem, ...p]);
 
-        await loadBlockchainState(provider, web3Address);
+        await loadBlockchainState(provider, address);
       } catch (err: any) {
         console.error("Deposit failed", err);
         addNotification(`Deposit failed: ${err.reason || err.message || err}`, "error");
@@ -827,12 +921,13 @@ export default function App() {
   const handleAccrueYield = async (vaultId: number) => {
     if (stateMode === "testnet") {
       if (!web3WalletConnected) return;
+      if (web3ChainId !== 5042002) {
+        addNotification("Wrong network! Please switch your wallet to Arc Testnet (Chain ID 5042002) first.", "error");
+        return;
+      }
       setIsWeb3Transacting(true);
       try {
-        const ethObj = getActiveEthereumObject();
-        if (!ethObj) throw new Error("Active wallet provider not found.");
-        const provider = new ethers.BrowserProvider(ethObj as any);
-        const signer = await provider.getSigner();
+        const { provider, signer, address } = await getSignerAndAddress();
         const contract = new ethers.Contract(liveContractAddress, YIELD_SAFE_ABI, signer);
 
         addNotification(`Compounding yield for Vault #${vaultId}...`, "info");
@@ -851,7 +946,7 @@ export default function App() {
         };
         setWeb3TxList(p => [historyItem, ...p]);
 
-        await loadBlockchainState(provider, web3Address);
+        await loadBlockchainState(provider, address);
       } catch (err: any) {
         console.error("Accrual failed", err);
         addNotification(`Accrual failed: ${err.reason || err.message || err}`, "error");
@@ -877,12 +972,13 @@ export default function App() {
   const handleWithdraw = async (vaultId: number) => {
     if (stateMode === "testnet") {
       if (!web3WalletConnected) return;
+      if (web3ChainId !== 5042002) {
+        addNotification("Wrong network! Please switch your wallet to Arc Testnet (Chain ID 5042002) first.", "error");
+        return;
+      }
       setIsWeb3Transacting(true);
       try {
-        const ethObj = getActiveEthereumObject();
-        if (!ethObj) throw new Error("Active wallet provider not found.");
-        const provider = new ethers.BrowserProvider(ethObj as any);
-        const signer = await provider.getSigner();
+        const { provider, signer, address } = await getSignerAndAddress();
         const contract = new ethers.Contract(liveContractAddress, YIELD_SAFE_ABI, signer);
 
         addNotification(`Withdrawing reserves and settling Vault #${vaultId}...`, "info");
@@ -901,7 +997,7 @@ export default function App() {
         };
         setWeb3TxList(p => [historyItem, ...p]);
 
-        await loadBlockchainState(provider, web3Address);
+        await loadBlockchainState(provider, address);
       } catch (err: any) {
         console.error("Release failed", err);
         addNotification(`Withdrawals failed: ${err.reason || err.message || err}`, "error");
@@ -970,12 +1066,13 @@ export default function App() {
   const handleClaimFees = async () => {
     if (stateMode === "testnet") {
       if (!web3WalletConnected) return;
+      if (web3ChainId !== 5042002) {
+        addNotification("Wrong network! Please switch your wallet to Arc Testnet (Chain ID 5042002) first.", "error");
+        return;
+      }
       setIsWeb3Transacting(true);
       try {
-        const ethObj = getActiveEthereumObject();
-        if (!ethObj) throw new Error("Active wallet provider not found.");
-        const provider = new ethers.BrowserProvider(ethObj as any);
-        const signer = await provider.getSigner();
+        const { provider, signer, address } = await getSignerAndAddress();
         const contract = new ethers.Contract(liveContractAddress, YIELD_SAFE_ABI, signer);
 
         addNotification("Executing platform reserves claims...", "info");
@@ -993,7 +1090,7 @@ export default function App() {
         };
         setWeb3TxList(p => [historyItem, ...p]);
 
-        await loadBlockchainState(provider, web3Address);
+        await loadBlockchainState(provider, address);
       } catch (err: any) {
         console.error("Platform Fees claim failed", err);
         addNotification(`Withdraw fees failed: ${err.reason || err.message || err}`, "error");
@@ -1692,6 +1789,7 @@ export default function App() {
           onConnectWallet={connectWallet}
           onDisconnectWallet={disconnectWallet}
           liveContractAddress={liveContractAddress}
+          isPrivy={isEmailOrGoogleUser}
         />
 
         {/* MAIN BODY CONTENT AREA */}

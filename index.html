@@ -100,11 +100,16 @@
                   isCrossOrigin = true;
                 }
 
-                var isIndex = typeof prop === 'string' && /^\d+$/.test(prop);
-
-                if (isCrossOrigin && !isIndex && typeof prop === 'string' && !allowedProps[prop]) {
-                  return undefined;
+                if (isCrossOrigin) {
+                  if (typeof prop !== 'string') {
+                    return undefined;
+                  }
+                  var isIndex = /^\d+$/.test(prop);
+                  if (!isIndex && !allowedProps[prop]) {
+                    return undefined;
+                  }
                 }
+
                 try {
                   var val = target[prop];
                   if (val === window.parent) return window.parent;
@@ -136,11 +141,16 @@
                   isCrossOrigin = true;
                 }
 
-                var isIndex = typeof prop === 'string' && /^\d+$/.test(prop);
-
-                if (isCrossOrigin && !isIndex && typeof prop === 'string' && !allowedProps[prop]) {
-                  return false;
+                if (isCrossOrigin) {
+                  if (typeof prop !== 'string') {
+                    return false;
+                  }
+                  var isIndex = /^\d+$/.test(prop);
+                  if (!isIndex && !allowedProps[prop]) {
+                    return false;
+                  }
                 }
+
                 try {
                   return prop in target;
                 } catch (err) {
@@ -169,48 +179,52 @@
           }
         }
 
+        // Redefine window.parent safely
         try {
           if (window.parent && window.parent !== window) {
             var safeParent = makeSafeFrameProxy(window.parent);
-            defineSafeProp(window, 'parent', safeParent);
             if (window.Window && window.Window.prototype) {
               defineSafeProp(window.Window.prototype, 'parent', safeParent);
             }
+            defineSafeProp(window, 'parent', safeParent);
           }
         } catch (e) {
           console.warn("Failed to redefine window.parent with safe proxy:", e);
         }
 
+        // Redefine window.top safely
         try {
           if (window.top && window.top !== window) {
             var safeTop = makeSafeFrameProxy(window.top);
-            defineSafeProp(window, 'top', safeTop);
             if (window.Window && window.Window.prototype) {
               defineSafeProp(window.Window.prototype, 'top', safeTop);
             }
+            defineSafeProp(window, 'top', safeTop);
           }
         } catch (e) {
           console.warn("Failed to redefine window.top with safe proxy:", e);
         }
 
+        // Redefine window.opener safely
         try {
           if (window.opener) {
             var safeOpener = makeSafeFrameProxy(window.opener);
-            defineSafeProp(window, 'opener', safeOpener);
             if (window.Window && window.Window.prototype) {
               defineSafeProp(window.Window.prototype, 'opener', safeOpener);
             }
+            defineSafeProp(window, 'opener', safeOpener);
           }
         } catch (e) {
           console.warn("Failed to redefine window.opener with safe proxy:", e);
         }
 
+        // Redefine window.frames safely
         try {
           var safeFrames = makeSafeFrameProxy(window);
-          defineSafeProp(window, 'frames', safeFrames);
           if (window.Window && window.Window.prototype) {
             defineSafeProp(window.Window.prototype, 'frames', safeFrames);
           }
+          defineSafeProp(window, 'frames', safeFrames);
         } catch (e) {
           console.warn("Failed to redefine window.frames with safe proxy:", e);
         }
