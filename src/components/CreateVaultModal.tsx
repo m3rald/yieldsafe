@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Shield, Calendar, Award, Info, Sparkles, PlusCircle } from "lucide-react";
+import { useWallets } from "@privy-io/react-auth";
+import { ethers } from "ethers";
 import { SimulationState } from "../types";
 import { formatUSDC } from "../mockContract";
 
@@ -50,18 +52,43 @@ export default function CreateVaultModal({
   const [initialDepositStr, setInitialDepositStr] = useState("100"); // typical default
   const [errorMessage, setErrorMessage] = useState("");
 
-  if (!isOpen) return null;
+  const { wallets } = useWallets();
+  const privyWallet = wallets.find(w => w.walletClientType === 'privy');
+  const [embeddedBalance, setEmbeddedBalance] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const isTestnet = stateMode === "testnet";
+
+  const fetchEmbeddedBalance = async () => {
+    if (!privyWallet) return;
+    setIsRefreshing(true);
+    try {
+      const provider = await privyWallet.getEthereumProvider();
+      const ethersProvider = new ethers.BrowserProvider(provider);
+      const balanceWei = await ethersProvider.getBalance(privyWallet.address);
+      const balUSDC = Number(balanceWei) / 1e18;
+      setEmbeddedBalance(balUSDC);
+    } catch (err) {
+      console.error("Failed to fetch embedded wallet balance:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && isTestnet && privyWallet) {
+      fetchEmbeddedBalance();
+    } else {
+      setEmbeddedBalance(null);
+    }
+  }, [isOpen, privyWallet, isTestnet]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
-
-    if (isTestnet && !web3WalletConnected) {
-      setErrorMessage("Please connect your wallet first");
-      return;
-    }
 
     if (!goalName.trim()) {
       setErrorMessage("Goal name is required");
@@ -152,6 +179,67 @@ export default function CreateVaultModal({
               <p className="text-xs font-semibold text-teal-200 font-sans leading-normal">{errorMessage}</p>
             </div>
           )}
+
+          {(() => {
+            const intendedDeposit = parseFloat(initialDepositStr || "0") || 0;
+            const gasBuffer = 0.1;
+            const showFundingBanner = isTestnet && !!privyWallet && embeddedBalance !== null && (embeddedBalance < (intendedDeposit + gasBuffer));
+
+            if (!showFundingBanner || !privyWallet) return null;
+
+            return (
+              <div className="p-4 bg-amber-950/30 border border-amber-900/50 rounded-xl space-y-2.5 text-xs animate-fade-in" id="privy-embedded-fund-banner">
+                <div className="flex items-start gap-2.5">
+                  <Info size={16} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-amber-200 font-sans">Fund Your Embedded Wallet</p>
+                    <p className="text-zinc-400 font-sans leading-relaxed">
+                      Your balance is too low (<strong>{embeddedBalance?.toFixed(4) ?? "0.00"} USDC</strong>) to cover the initial deposit of <strong>{intendedDeposit} USDC</strong> plus gas fees on Arc Testnet.
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Wallet Address & Copy Button */}
+                <div className="flex items-center justify-between gap-2 p-2 bg-zinc-950 border border-zinc-800/80 rounded-lg font-mono text-[11px] text-zinc-300">
+                  <span className="truncate max-w-[280px]" title={privyWallet.address}>
+                    {privyWallet.address}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(privyWallet.address);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="text-teal-400 hover:text-teal-300 transition font-sans font-bold text-[10px] uppercase tracking-wider flex-shrink-0 cursor-pointer"
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                  <a
+                    href="https://faucet.circle.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-teal-400 hover:text-teal-300 underline underline-offset-4 decoration-teal-500/30 transition-colors font-bold font-sans flex items-center gap-1"
+                    id="circle-faucet-link"
+                  >
+                    Go to Circle Faucet ↗
+                  </a>
+                  
+                  <button
+                    type="button"
+                    disabled={isRefreshing}
+                    onClick={fetchEmbeddedBalance}
+                    className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-black rounded-lg transition disabled:opacity-50 cursor-pointer font-sans uppercase tracking-wider"
+                  >
+                    {isRefreshing ? "Refreshing..." : "Refresh Balance"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Goal Name */}
           <div className="space-y-1.5">
@@ -329,26 +417,15 @@ export default function CreateVaultModal({
             >
               Cancel
             </button>
-            {isTestnet && !web3WalletConnected ? (
-              <button
-                type="button"
-                onClick={onConnectWallet}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-sky-500 hover:bg-sky-450 text-zinc-950 text-xs font-bold rounded-xl transition shadow-md font-sans"
-                id="btn-modal-connect-wallet"
-              >
-                Connect MetaMask Wallet
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={isWeb3Transacting}
-                className="flex items-center gap-1 px-5 py-2 bg-teal-500 hover:bg-teal-400 text-zinc-950 text-xs font-bold rounded-xl transition shadow-md shadow-teal-950 font-sans disabled:opacity-50 disabled:cursor-not-allowed"
-                id="btn-create-submit"
-              >
-                <Sparkles size={12} fill="currentColor" />
-                {isWeb3Transacting ? "Broadcasting..." : (isTestnet && web3Allowance < (parseFloat(initialDepositStr || "0") * 1000000) ? "Approve & Compile" : "Compile & Initialize")}
-              </button>
-            )}
+            <button
+              type="submit"
+              disabled={isWeb3Transacting}
+              className="flex items-center gap-1 px-5 py-2 bg-teal-500 hover:bg-teal-400 text-zinc-950 text-xs font-bold rounded-xl transition shadow-md shadow-teal-950 font-sans disabled:opacity-50 disabled:cursor-not-allowed"
+              id="btn-create-submit"
+            >
+              <Sparkles size={12} fill="currentColor" />
+              {isWeb3Transacting ? "Broadcasting..." : (isTestnet && web3Allowance < (parseFloat(initialDepositStr || "0") * 1000000) ? "Approve & Compile" : "Compile & Initialize")}
+            </button>
           </div>
         </form>
       </div>

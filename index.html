@@ -4,6 +4,197 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
+    <script>
+      (function() {
+        // Suppress cross-origin frame access security errors
+        window.addEventListener('error', function(event) {
+          var msg = event.message || '';
+          if (
+            msg.includes('Blocked a frame with origin') ||
+            msg.includes('cross-origin frame') ||
+            msg.includes('SecurityError') ||
+            msg.includes('Failed to read') ||
+            msg.includes('ethereum')
+          ) {
+            try {
+              event.preventDefault();
+              event.stopPropagation();
+            } catch (e) {}
+            console.warn('Soft-suppressed iframe cross-origin error:', msg);
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reasonMsg = (event.reason && event.reason.message) || '';
+          if (
+            reasonMsg.includes('Blocked a frame with origin') ||
+            reasonMsg.includes('cross-origin frame') ||
+            reasonMsg.includes('SecurityError') ||
+            reasonMsg.includes('Failed to read') ||
+            reasonMsg.includes('ethereum')
+          ) {
+            try {
+              event.preventDefault();
+              event.stopPropagation();
+            } catch (e) {}
+            console.warn('Soft-suppressed iframe cross-origin promise rejection:', reasonMsg);
+          }
+        }, true);
+
+        try {
+          var originalFetch = window.fetch;
+          var currentFetch = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return currentFetch;
+            },
+            set: function(val) {
+              currentFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          console.warn("Failed to patch window.fetch setter in index.html:", e);
+        }
+
+        // Cross-origin Frame property proxy (such as parent, top) to prevent frame origin security errors
+        function isWindow(obj) {
+          if (!obj) return false;
+          try {
+            return obj.window === obj;
+          } catch (e) {
+            return true; // Cross-origin Window
+          }
+        }
+
+        function makeSafeFrameProxy(targetFrame) {
+          if (!targetFrame) return targetFrame;
+          try {
+            var allowedProps = {
+              window: true,
+              self: true,
+              postMessage: true,
+              close: true,
+              closed: true,
+              focus: true,
+              blur: true,
+              frames: true,
+              length: true,
+              top: true,
+              opener: true,
+              parent: true,
+              location: true
+            };
+
+            return new Proxy(targetFrame, {
+              get: function(target, prop) {
+                if (prop === '__isSafeFrameProxy') {
+                  return true;
+                }
+
+                var isCrossOrigin = false;
+                try {
+                  var doc = target.document;
+                } catch (err) {
+                  isCrossOrigin = true;
+                }
+
+                if (isCrossOrigin && typeof prop === 'string' && !allowedProps[prop]) {
+                  return undefined;
+                }
+                try {
+                  var val = target[prop];
+                  if (val === window.parent) return window.parent;
+                  if (val === window.top) return window.top;
+                  if (val === window) return window;
+                  if (val && typeof val === 'object') {
+                    if (val.__isSafeFrameProxy) {
+                      return val;
+                    }
+                    if (isWindow(val)) {
+                      return makeSafeFrameProxy(val);
+                    }
+                  }
+                  return val;
+                } catch (err) {
+                  // Safely intercept and return undefined instead of throwing fatal cross-origin TypeErrors
+                  return undefined;
+                }
+              },
+              has: function(target, prop) {
+                if (prop === '__isSafeFrameProxy') {
+                  return true;
+                }
+
+                var isCrossOrigin = false;
+                try {
+                  var doc = target.document;
+                } catch (err) {
+                  isCrossOrigin = true;
+                }
+
+                if (isCrossOrigin && typeof prop === 'string' && !allowedProps[prop]) {
+                  return false;
+                }
+                try {
+                  return prop in target;
+                } catch (err) {
+                  return false;
+                }
+              }
+            });
+          } catch (e) {
+            return targetFrame;
+          }
+        }
+
+        try {
+          if (window.parent && window.parent !== window) {
+            var safeParent = makeSafeFrameProxy(window.parent);
+            Object.defineProperty(window, 'parent', {
+              get: function() {
+                return safeParent;
+              },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {
+          console.warn("Failed to redefine window.parent with safe proxy:", e);
+        }
+
+        try {
+          if (window.top && window.top !== window) {
+            var safeTop = makeSafeFrameProxy(window.top);
+            Object.defineProperty(window, 'top', {
+              get: function() {
+                return safeTop;
+              },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {
+          console.warn("Failed to redefine window.top with safe proxy:", e);
+        }
+
+        try {
+          if (window.opener) {
+            var safeOpener = makeSafeFrameProxy(window.opener);
+            Object.defineProperty(window, 'opener', {
+              get: function() {
+                return safeOpener;
+              },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {
+          console.warn("Failed to redefine window.opener with safe proxy:", e);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

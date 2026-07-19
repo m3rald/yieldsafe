@@ -63,8 +63,12 @@ import {
   approveUSDC 
 } from "./web3Contract";
 import { ethers } from "ethers";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 
 export default function App() {
+  const { login, logout, authenticated, user } = usePrivy();
+  const { wallets } = useWallets();
+  const [privyProvider, setPrivyProvider] = useState<any>(null);
   const [state, setState] = useState<SimulationState>(getInitialState);
   const [currentView, setCurrentView] = useState<"landing" | "main">("landing");
   const [themeMode, setThemeMode] = useState<"dark" | "light">(() => {
@@ -104,6 +108,9 @@ export default function App() {
   const [isWalletSelectorOpen, setIsWalletSelectorOpen] = useState(false);
 
   const getActiveEthereumObject = (walletType: string = selectedWallet) => {
+    if (authenticated && privyProvider) {
+      return privyProvider;
+    }
     if (typeof window === "undefined") return undefined;
     try {
       const anyWin = window as any;
@@ -477,6 +484,72 @@ export default function App() {
     addNotification("Wallet disconnected. Returning to Local Simulation presets.", "info");
   };
 
+  // Sync Privy embedded wallet to Web3 state
+  useEffect(() => {
+    let active = true;
+    if (authenticated && wallets.length > 0) {
+      const privyWallet = wallets.find(w => w.walletClientType === 'privy');
+      if (privyWallet) {
+        privyWallet.getEthereumProvider().then((provider) => {
+          if (!active) return;
+          setPrivyProvider(provider);
+          setWeb3Address(privyWallet.address);
+          setWeb3WalletConnected(true);
+          setSelectedWallet("privy");
+
+          // Automatically switch/add Arc Testnet network if needed
+          const ethersProvider = new ethers.BrowserProvider(provider);
+          ethersProvider.getNetwork().then((net) => {
+            const currentChainId = Number(net.chainId);
+            setWeb3ChainId(currentChainId);
+            if (currentChainId !== 5042002) {
+              const targetChainIdHex = "0x" + Number(5042002).toString(16);
+              provider.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: targetChainIdHex }],
+              }).catch((switchError: any) => {
+                const isChainMissing = 
+                  switchError?.code === 4902 || 
+                  switchError?.code === -32603 || 
+                  (switchError?.message && (
+                    switchError.message.includes("Unrecognized chain ID") || 
+                    switchError.message.includes("4902") || 
+                    switchError.message.includes("Unrecognized chain") ||
+                    switchError.message.includes("wallet_addEthereumChain")
+                  ));
+                if (isChainMissing) {
+                  provider.request({
+                    method: "wallet_addEthereumChain",
+                    params: [
+                      {
+                        chainId: targetChainIdHex,
+                        chainName: "Arc Testnet",
+                        nativeCurrency: {
+                          name: "USDC",
+                          symbol: "USDC",
+                          decimals: 6,
+                        },
+                        rpcUrls: ["https://rpc.testnet.arc.network"],
+                        blockExplorerUrls: ["https://testnet.arcscan.app"],
+                      },
+                    ],
+                  }).catch(console.error);
+                }
+              });
+            }
+          });
+        }).catch((err) => {
+          console.error("Failed to get Privy provider:", err);
+        });
+      }
+    } else {
+      setPrivyProvider(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [authenticated, wallets]);
+
   // Set up account/chain listeners based on active wallet type
   useEffect(() => {
     const activeWalletType = localStorage.getItem("yieldsafe_selected_wallet") || selectedWallet || "metamask";
@@ -627,13 +700,14 @@ export default function App() {
     initialDeposit: number
   ) => {
     if (stateMode === "testnet") {
-      if (!web3WalletConnected) {
-        addNotification("Connect your wallet to formulate goal vaults on-chain.", "error");
+      const privyWallet = wallets.find(w => w.walletClientType === 'privy');
+      if (!privyWallet) {
+        addNotification("Please login via Privy first to formulate on-chain vaults.", "error");
         return;
       }
       setIsWeb3Transacting(true);
       try {
-        const ethObj = getActiveEthereumObject();
+        const ethObj = await privyWallet.getEthereumProvider();
         if (!ethObj) throw new Error("Active wallet provider not found.");
         const provider = new ethers.BrowserProvider(ethObj as any);
         const signer = await provider.getSigner();
@@ -646,12 +720,12 @@ export default function App() {
           await aprTx.wait();
           addNotification("USDC Approved! Formulating Savings Goal on-chain...", "success");
 
-          const freshAllowance = await getUSDCAllowance(provider, web3Address, liveContractAddress, usdcTokenAddress);
+          const freshAllowance = await getUSDCAllowance(provider, privyWallet.address, liveContractAddress, usdcTokenAddress);
           setWeb3Allowance(freshAllowance);
         }
 
         const contract = new ethers.Contract(liveContractAddress, YIELD_SAFE_ABI, signer);
-        addNotification("Please confirm the formulation transaction in MetaMask...", "info");
+        addNotification("Please confirm the formulation transaction in Privy...", "info");
         const tx = await contract.createVault(
           goalName,
           targetAmount,
@@ -672,7 +746,7 @@ export default function App() {
         };
         setWeb3TxList(p => [historyItem, ...p]);
         
-        await loadBlockchainState(provider, web3Address);
+        await loadBlockchainState(provider, privyWallet.address);
       } catch (err: any) {
         console.error("Failed to create vault on-chain", err);
         addNotification(`Formulation failed: ${err.reason || err.message || err}`, "error");
@@ -972,7 +1046,7 @@ export default function App() {
               <span className="text-teal-400 font-black">Safe</span>
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={toggleTheme}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full select-none text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
@@ -995,6 +1069,28 @@ export default function App() {
                 </>
               )}
             </button>
+            {authenticated ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-350 font-mono bg-zinc-950 border border-zinc-900 px-3 py-1.5 rounded-xl">
+                  {user?.email?.address || user?.google?.email || (user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : "Authenticated")}
+                </span>
+                <button
+                  onClick={logout}
+                  className="bg-zinc-850 hover:bg-zinc-800 border border-zinc-750 text-zinc-200 px-3 py-1.5 rounded-xl text-xs font-bold font-sans transition cursor-pointer"
+                  id="landing-privy-logout-btn"
+                >
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={login}
+                className="bg-teal-500 hover:bg-teal-400 text-zinc-950 px-4 py-1.5 rounded-xl text-xs font-bold font-sans transition cursor-pointer"
+                id="landing-privy-login-btn"
+              >
+                Log in
+              </button>
+            )}
             <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-zinc-500 bg-zinc-950 border border-zinc-900 px-2.5 py-1 rounded-md">
               v1.1.2 Sandbox
             </span>
@@ -1429,6 +1525,29 @@ export default function App() {
                 <Moon size={15} className="text-sky-400" />
               )}
             </button>
+
+            {authenticated ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-350 font-mono bg-zinc-950/80 border border-zinc-850 px-3 py-2.5 rounded-2xl">
+                  {user?.email?.address || user?.google?.email || (user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : "Authenticated")}
+                </span>
+                <button
+                  onClick={logout}
+                  className="bg-zinc-850 hover:bg-zinc-800 border border-zinc-750 text-zinc-200 px-4 py-3 rounded-2xl text-xs font-bold font-sans transition cursor-pointer"
+                  id="dashboard-privy-logout-btn"
+                >
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={login}
+                className="bg-teal-500 hover:bg-teal-400 text-zinc-950 px-5 py-3 rounded-2xl text-xs font-bold font-sans transition cursor-pointer"
+                id="dashboard-privy-login-btn"
+              >
+                Log in
+              </button>
+            )}
 
             <button
               onClick={() => setIsModalOpen(true)}
