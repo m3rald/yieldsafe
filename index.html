@@ -100,7 +100,9 @@
                   isCrossOrigin = true;
                 }
 
-                if (isCrossOrigin && typeof prop === 'string' && !allowedProps[prop]) {
+                var isIndex = typeof prop === 'string' && /^\d+$/.test(prop);
+
+                if (isCrossOrigin && !isIndex && typeof prop === 'string' && !allowedProps[prop]) {
                   return undefined;
                 }
                 try {
@@ -134,7 +136,9 @@
                   isCrossOrigin = true;
                 }
 
-                if (isCrossOrigin && typeof prop === 'string' && !allowedProps[prop]) {
+                var isIndex = typeof prop === 'string' && /^\d+$/.test(prop);
+
+                if (isCrossOrigin && !isIndex && typeof prop === 'string' && !allowedProps[prop]) {
                   return false;
                 }
                 try {
@@ -149,16 +153,29 @@
           }
         }
 
-        try {
-          if (window.parent && window.parent !== window) {
-            var safeParent = makeSafeFrameProxy(window.parent);
-            Object.defineProperty(window, 'parent', {
+        function defineSafeProp(obj, propName, safeValue) {
+          try {
+            Object.defineProperty(obj, propName, {
               get: function() {
-                return safeParent;
+                return safeValue;
               },
               configurable: true,
               enumerable: true
             });
+          } catch (e) {
+            try {
+              obj[propName] = safeValue;
+            } catch (err) {}
+          }
+        }
+
+        try {
+          if (window.parent && window.parent !== window) {
+            var safeParent = makeSafeFrameProxy(window.parent);
+            defineSafeProp(window, 'parent', safeParent);
+            if (window.Window && window.Window.prototype) {
+              defineSafeProp(window.Window.prototype, 'parent', safeParent);
+            }
           }
         } catch (e) {
           console.warn("Failed to redefine window.parent with safe proxy:", e);
@@ -167,13 +184,10 @@
         try {
           if (window.top && window.top !== window) {
             var safeTop = makeSafeFrameProxy(window.top);
-            Object.defineProperty(window, 'top', {
-              get: function() {
-                return safeTop;
-              },
-              configurable: true,
-              enumerable: true
-            });
+            defineSafeProp(window, 'top', safeTop);
+            if (window.Window && window.Window.prototype) {
+              defineSafeProp(window.Window.prototype, 'top', safeTop);
+            }
           }
         } catch (e) {
           console.warn("Failed to redefine window.top with safe proxy:", e);
@@ -182,16 +196,91 @@
         try {
           if (window.opener) {
             var safeOpener = makeSafeFrameProxy(window.opener);
-            Object.defineProperty(window, 'opener', {
-              get: function() {
-                return safeOpener;
-              },
-              configurable: true,
-              enumerable: true
-            });
+            defineSafeProp(window, 'opener', safeOpener);
+            if (window.Window && window.Window.prototype) {
+              defineSafeProp(window.Window.prototype, 'opener', safeOpener);
+            }
           }
         } catch (e) {
           console.warn("Failed to redefine window.opener with safe proxy:", e);
+        }
+
+        try {
+          var safeFrames = makeSafeFrameProxy(window);
+          defineSafeProp(window, 'frames', safeFrames);
+          if (window.Window && window.Window.prototype) {
+            defineSafeProp(window.Window.prototype, 'frames', safeFrames);
+          }
+        } catch (e) {
+          console.warn("Failed to redefine window.frames with safe proxy:", e);
+        }
+
+        try {
+          if (window.HTMLIFrameElement && window.HTMLIFrameElement.prototype) {
+            var originalContentWindowGetter = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow')?.get;
+            if (originalContentWindowGetter) {
+              Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+                get: function() {
+                  try {
+                    var win = originalContentWindowGetter.call(this);
+                    return makeSafeFrameProxy(win);
+                  } catch (err) {
+                    return undefined;
+                  }
+                },
+                configurable: true,
+                enumerable: true
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to redefine HTMLIFrameElement.prototype.contentWindow:", e);
+        }
+
+        try {
+          if (window.MessageEvent && window.MessageEvent.prototype) {
+            var originalSourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')?.get;
+            if (originalSourceGetter) {
+              Object.defineProperty(MessageEvent.prototype, 'source', {
+                get: function() {
+                  try {
+                    var src = originalSourceGetter.call(this);
+                    return makeSafeFrameProxy(src);
+                  } catch (err) {
+                    return null;
+                  }
+                },
+                configurable: true,
+                enumerable: true
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to redefine MessageEvent.prototype.source:", e);
+        }
+
+        try {
+          if (window.Window && window.Window.prototype) {
+            for (var i = 0; i < 20; i++) {
+              (function(idx) {
+                Object.defineProperty(Window.prototype, idx, {
+                  get: function() {
+                    try {
+                      var iframes = document.querySelectorAll('iframe');
+                      if (iframes[idx]) {
+                        return makeSafeFrameProxy(iframes[idx].contentWindow);
+                      }
+                    } catch (err) {}
+                    return undefined;
+                  },
+                  configurable: true,
+                  enumerable: true
+                });
+              })(i);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to define indexed properties on Window.prototype:", e);
         }
       })();
     </script>
