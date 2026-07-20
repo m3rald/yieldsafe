@@ -500,9 +500,9 @@ export default function App() {
     const isEmailOrGoogle = authenticated && !!(user?.email || user?.google);
     let targetWallet = null;
     if (isEmailOrGoogle) {
-      targetWallet = wallets.find(w => w.walletClientType === "privy");
+      targetWallet = wallets.find(w => w.walletClientType === "privy") || wallets[0];
     } else {
-      targetWallet = wallets.find(w => w.walletClientType !== "privy");
+      targetWallet = wallets.find(w => w.walletClientType !== "privy") || wallets[0];
     }
 
     if (targetWallet) {
@@ -515,9 +515,9 @@ export default function App() {
     const isEmailOrGoogle = authenticated && !!(user?.email || user?.google);
     let targetWallet = null;
     if (isEmailOrGoogle) {
-      targetWallet = wallets.find(w => w.walletClientType === "privy");
+      targetWallet = wallets.find(w => w.walletClientType === "privy") || wallets[0];
     } else {
-      targetWallet = wallets.find(w => w.walletClientType !== "privy");
+      targetWallet = wallets.find(w => w.walletClientType !== "privy") || wallets[0];
     }
 
     let ethObj = null;
@@ -571,9 +571,9 @@ export default function App() {
       const isEmailOrGoogle = !!(user?.email || user?.google);
       let targetWallet = null;
       if (isEmailOrGoogle) {
-        targetWallet = wallets.find(w => w.walletClientType === "privy");
+        targetWallet = wallets.find(w => w.walletClientType === "privy") || wallets[0];
       } else {
-        targetWallet = wallets.find(w => w.walletClientType !== "privy");
+        targetWallet = wallets.find(w => w.walletClientType !== "privy") || wallets[0];
       }
 
       if (targetWallet) {

@@ -6,26 +6,89 @@
     <title>My Google AI Studio App</title>
     <script>
       (function() {
+        // Patch window.fetch safely to prevent "read-only property" or "only a getter" assignment errors
+        try {
+          var originalFetch = window.fetch;
+          var currentFetch = originalFetch;
+          function patchFetch(target) {
+            try {
+              Object.defineProperty(target, 'fetch', {
+                get: function() {
+                  return currentFetch;
+                },
+                set: function(val) {
+                  currentFetch = val;
+                },
+                configurable: true,
+                enumerable: true
+              });
+              return true;
+            } catch (err) {
+              return false;
+            }
+          }
+          patchFetch(window);
+          if (window.Window && window.Window.prototype) {
+            patchFetch(window.Window.prototype);
+          }
+          if (window.__proto__) {
+            patchFetch(window.__proto__);
+          }
+        } catch (e) {
+          console.warn("Failed to patch window.fetch setter in index.html:", e);
+        }
+
+        // Assign window.onerror to suppress errors before they bubble to the browser console/host environment
+        try {
+          window.onerror = function(message, source, lineno, colno, error) {
+            var msg = (message || '').toString();
+            var errMsg = (error && error.message || '').toString();
+            if (
+              msg.includes('Blocked a frame with origin') ||
+              msg.includes('cross-origin frame') ||
+              msg.includes('SecurityError') ||
+              msg.includes('Failed to read') ||
+              msg.includes('ethereum') ||
+              errMsg.includes('Blocked a frame with origin') ||
+              errMsg.includes('cross-origin frame') ||
+              errMsg.includes('SecurityError') ||
+              errMsg.includes('Failed to read') ||
+              errMsg.includes('ethereum')
+            ) {
+              console.warn('Soft-suppressed window.onerror:', msg || errMsg);
+              return true; // Suppress reporting to the host
+            }
+          };
+        } catch (e) {
+          console.warn('Failed to define window.onerror:', e);
+        }
+
         // Suppress cross-origin frame access security errors
         window.addEventListener('error', function(event) {
-          var msg = event.message || '';
+          var msg = (event.message || '').toString();
+          var errMsg = (event.error && event.error.message || '').toString();
           if (
             msg.includes('Blocked a frame with origin') ||
             msg.includes('cross-origin frame') ||
             msg.includes('SecurityError') ||
             msg.includes('Failed to read') ||
-            msg.includes('ethereum')
+            msg.includes('ethereum') ||
+            errMsg.includes('Blocked a frame with origin') ||
+            errMsg.includes('cross-origin frame') ||
+            errMsg.includes('SecurityError') ||
+            errMsg.includes('Failed to read') ||
+            errMsg.includes('ethereum')
           ) {
             try {
               event.preventDefault();
               event.stopPropagation();
             } catch (e) {}
-            console.warn('Soft-suppressed iframe cross-origin error:', msg);
+            console.warn('Soft-suppressed iframe cross-origin error:', msg || errMsg);
           }
         }, true);
 
         window.addEventListener('unhandledrejection', function(event) {
-          var reasonMsg = (event.reason && event.reason.message) || '';
+          var reasonMsg = (event.reason && (event.reason.message || event.reason.toString()) || '').toString();
           if (
             reasonMsg.includes('Blocked a frame with origin') ||
             reasonMsg.includes('cross-origin frame') ||
@@ -40,23 +103,6 @@
             console.warn('Soft-suppressed iframe cross-origin promise rejection:', reasonMsg);
           }
         }, true);
-
-        try {
-          var originalFetch = window.fetch;
-          var currentFetch = originalFetch;
-          Object.defineProperty(window, 'fetch', {
-            get: function() {
-              return currentFetch;
-            },
-            set: function(val) {
-              currentFetch = val;
-            },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) {
-          console.warn("Failed to patch window.fetch setter in index.html:", e);
-        }
 
         // Cross-origin Frame property proxy (such as parent, top) to prevent frame origin security errors
         function isWindow(obj) {
@@ -237,6 +283,71 @@
                 get: function() {
                   try {
                     var win = originalContentWindowGetter.call(this);
+                    if (win) {
+                      // Dynamically patch same-origin iframe's parent and top
+                      try {
+                        if (win.parent && win.parent !== win) {
+                          var safeParent = makeSafeFrameProxy(win.parent);
+                          if (win.Window && win.Window.prototype) {
+                            defineSafeProp(win.Window.prototype, 'parent', safeParent);
+                          }
+                          defineSafeProp(win, 'parent', safeParent);
+                        }
+                      } catch (e) {}
+                      try {
+                        if (win.top && win.top !== win) {
+                          var safeTop = makeSafeFrameProxy(win.top);
+                          if (win.Window && win.Window.prototype) {
+                            defineSafeProp(win.Window.prototype, 'top', safeTop);
+                          }
+                          defineSafeProp(win, 'top', safeTop);
+                        }
+                      } catch (e) {}
+                      // Add error listeners to same-origin iframe window
+                      try {
+                        win.onerror = function(message, source, lineno, colno, error) {
+                          var msg = (message || '').toString();
+                          var errMsg = (error && error.message || '').toString();
+                          if (
+                            msg.includes('Blocked a frame with origin') ||
+                            msg.includes('cross-origin frame') ||
+                            msg.includes('SecurityError') ||
+                            msg.includes('Failed to read') ||
+                            msg.includes('ethereum') ||
+                            errMsg.includes('Blocked a frame with origin') ||
+                            errMsg.includes('cross-origin frame') ||
+                            errMsg.includes('SecurityError') ||
+                            errMsg.includes('Failed to read') ||
+                            errMsg.includes('ethereum')
+                          ) {
+                            console.warn('Soft-suppressed iframe onerror:', msg || errMsg);
+                            return true;
+                          }
+                        };
+                        win.addEventListener('error', function(event) {
+                          var msg = (event.message || '').toString();
+                          var errMsg = (event.error && event.error.message || '').toString();
+                          if (
+                            msg.includes('Blocked a frame with origin') ||
+                            msg.includes('cross-origin frame') ||
+                            msg.includes('SecurityError') ||
+                            msg.includes('Failed to read') ||
+                            msg.includes('ethereum') ||
+                            errMsg.includes('Blocked a frame with origin') ||
+                            errMsg.includes('cross-origin frame') ||
+                            errMsg.includes('SecurityError') ||
+                            errMsg.includes('Failed to read') ||
+                            errMsg.includes('ethereum')
+                          ) {
+                            try {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            } catch (e) {}
+                            console.warn('Soft-suppressed iframe error listener:', msg || errMsg);
+                          }
+                        }, true);
+                      } catch (e) {}
+                    }
                     return makeSafeFrameProxy(win);
                   } catch (err) {
                     return undefined;
